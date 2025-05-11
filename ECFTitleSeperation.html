@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECF Title Separation Calculator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .results-area {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #fff;
+            white-space: pre-wrap;
+        }
+        .debug-area {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .debug-message {
+            margin: 2px 0;
+            color: #555;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .note {
+            background-color: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            color: #555;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ECF Title Separation Calculator</h1>
+        
+        <p>This calculator determines how many steps a player is from having beaten a titled player.:</p>
+        <ul>
+            <li><strong>0</strong>: Player has directly beaten a titled player</li>
+            <li><strong>1</strong>: Player has beaten someone who has beaten a titled player</li>
+            <li><strong>n</strong>: Player is n steps removed from beating a titled player</li>
+            <li><strong>-1</strong>: No path exists to a titled player</li>
+        </ul>
+
+        <form id="calculator-form">
+            <div class="form-group">
+                <label for="player-code">ECF Player Code:</label>
+                <input type="text" id="player-code" placeholder="e.g., 372524J" required>
+                <small>You can find your ECF code on the <a href="https://rating.englishchess.org.uk/v2/new/list_players.php" target="_blank">ECF Rating website</a></small>
+            </div>
+            
+            <div class="form-group">
+                <label for="debug-level">Debug Level:</label>
+                <select id="debug-level">
+                    <option value="0">0 - Minimal</option>
+                    <option value="1">1 - Some</option>
+                    <option value="2">2 - Detailed</option>
+                </select>
+            </div>
+            
+            <button type="submit" id="calculate-button">Calculate</button>
+        </form>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Calculating... This may take a few minutes...</p>
+        </div>
+        
+        <h3>Results:</h3>
+        
+        <div id="results" class="results-area"></div>
+        
+        <h3>Debug Output:</h3>
+        <div id="debug-area" class="debug-area"></div>
+    </div>
+    
+    <script src="ECFTitleSeperation.js"></script>
+</body>
+</html>
