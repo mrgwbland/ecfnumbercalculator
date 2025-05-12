@@ -107,6 +107,43 @@
             color: #555;
             font-size: 14px;
         }
+        .title-checkboxes {
+            margin-top: 5px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .checkbox-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .checkbox-row label {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 15px;
+            margin-bottom: 5px;
+            font-weight: normal;
+        }
+        .checkbox-row input {
+            margin-right: 5px;
+        }
+        .select-buttons {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .select-buttons button {
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -118,7 +155,6 @@
             <li><strong>0</strong>: Player has directly beaten a titled player</li>
             <li><strong>1</strong>: Player has beaten someone who has beaten a titled player</li>
             <li><strong>n</strong>: Player is n steps removed from beating a titled player</li>
-            <li><strong>-1</strong>: No path exists to a titled player</li>
         </ul>
 
         <form id="calculator-form">
@@ -135,6 +171,30 @@
                     <option value="1">1 - Some</option>
                     <option value="2">2 - Detailed</option>
                 </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Filter Titled Players:</label>
+                <div class="title-checkboxes">
+                    <div class="checkbox-row">
+                        <label><input type="checkbox" class="title-checkbox" value="GM" checked> GM</label>
+                        <label><input type="checkbox" class="title-checkbox" value="IM" checked> IM</label>
+                        <label><input type="checkbox" class="title-checkbox" value="FM" checked> FM</label>
+                        <label><input type="checkbox" class="title-checkbox" value="CM" checked> CM</label>
+                        <label><input type="checkbox" class="title-checkbox" value="NM" checked> NM</label>
+                    </div>
+                    <div class="checkbox-row">
+                        <label><input type="checkbox" class="title-checkbox" value="WGM" checked> WGM</label>
+                        <label><input type="checkbox" class="title-checkbox" value="WIM" checked> WIM</label>
+                        <label><input type="checkbox" class="title-checkbox" value="WFM" checked> WFM</label>
+                        <label><input type="checkbox" class="title-checkbox" value="WCM" checked> WCM</label>
+                    </div>
+                    <div class="select-buttons">
+                        <button type="button" id="select-all-titles">Select All</button>
+                        <button type="button" id="deselect-all-titles">Deselect All</button>
+                    </div>
+                    <p class="note">Note: Deselecting all titles will automatically select all of them</p>
+                </div>
             </div>
             
             <button type="submit" id="calculate-button">Calculate</button>

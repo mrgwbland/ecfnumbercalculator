@@ -308,9 +308,6 @@ async function getPlayerInfoWithProxyFallback(playerCode) {
         } catch (e) {
             debugPrint(`Proxy ${proxyKey} failed: ${e.message}`, 1);
         }
-        
-        // Small delay before trying the next proxy
-        await new Promise(r => setTimeout(r, 300));
     }
     
     // Return to best proxy
@@ -424,9 +421,30 @@ async function getPlayerGames(playerCode, gameType = "Standard", limit = 100) {
 }
 
 /**
- * Check if a player has a title
+ * Get selected titles from checkboxes
  */
-function isTitledPlayer(playerInfo) {
+function getSelectedTitles() {
+    const selectedTitles = [];
+    const checkboxes = document.querySelectorAll('.title-checkbox:checked');
+    checkboxes.forEach(checkbox => {
+        selectedTitles.push(checkbox.value);
+    });
+    
+    // If no titles are selected, include all titles
+    if (selectedTitles.length === 0) {
+        return ["GM", "IM", "FM", "CM", "NM", "WGM", "WIM", "WFM", "WCM"];
+    }
+    
+    return selectedTitles;
+}
+
+/**
+ * Check if a player has a title that matches the filter
+ * @param playerInfo - The player information object
+ * @param selectedTitles - Array of selected title codes
+ * @param filterBySelected - If true, only match selected titles; if false, match any title
+ */
+function isTitledPlayer(playerInfo, selectedTitles = [], filterBySelected = false) {
     if (!playerInfo) {
         debugPrint("No player info provided to check for title", 2);
         return false;
@@ -437,8 +455,50 @@ function isTitledPlayer(playerInfo) {
     // Check for title field
     const title = playerInfo.title || "";
     if (title && title.trim()) {
-        addResult(`✓ Found titled player: ${playerName} with title: ${title}`);
-        return true;
+        // For intermediate nodes, any title is fine
+        if (!filterBySelected) {
+            addResult(`✓ Found titled player: ${playerName} with title: ${title}`);
+            return true;
+        }
+        
+        // For final node, properly parse individual titles
+        // Split the title string by common separators
+        const titleUpper = title.trim().toUpperCase();
+        
+        // Extract individual titles by splitting on common separators
+        let individualTitles = [];
+        
+        // First try to split on common separators
+        const splitTitles = titleUpper.split(/[\/,\s]+/);
+        
+        for (const splitTitle of splitTitles) {
+            // Only add valid title codes
+            if (["GM", "IM", "FM", "CM", "NM", "WGM", "WIM", "WFM", "WCM"].includes(splitTitle)) {
+                individualTitles.push(splitTitle);
+            }
+        }
+        
+        // If no valid titles were found in the split, check for embedded titles
+        if (individualTitles.length === 0) {
+            for (const t of ["GM", "IM", "FM", "CM", "NM", "WGM", "WIM", "WFM", "WCM"]) {
+                if (titleUpper === t || titleUpper.includes(t)) {
+                    individualTitles.push(t);
+                }
+            }
+        }
+        
+        // Check if any of the individual titles match the selected titles
+        const matchingTitles = individualTitles.filter(t => selectedTitles.includes(t));
+        
+        if (matchingTitles.length > 0) {
+            const matchingTitlesStr = matchingTitles.join(", ");
+            addResult(`✓ Found titled player with matching title: ${playerName} (${matchingTitlesStr})`);
+            return true;
+        } else {
+            const availableTitles = individualTitles.join(", ");
+            debugPrint(`Player ${playerName} has title(s) ${availableTitles} but none match selected filters`, 2);
+            return false;
+        }
     } else {
         debugPrint(`No title field for ${playerName}`, 2);
     }
@@ -450,15 +510,40 @@ function isTitledPlayer(playerInfo) {
         return false;
     }
     
-    const titlePrefixes = ["GM ", "IM ", "FM ", "CM ", "NM ", "WGM ", "WIM ", "WFM ", "WCM "];
-    for (const prefix of titlePrefixes) {
-        if (name.startsWith(prefix)) {
-            addResult(`✓ Found titled player by name prefix: ${name} (starts with ${prefix})`);
-            return true;
+    // Define title prefixes
+    const allTitlePrefixes = {
+        "GM": "GM ",
+        "IM": "IM ",
+        "FM": "FM ",
+        "CM": "CM ",
+        "NM": "NM ",
+        "WGM": "WGM ",
+        "WIM": "WIM ",
+        "WFM": "WFM ",
+        "WCM": "WCM "
+    };
+    
+    // For intermediate nodes, check any title
+    if (!filterBySelected) {
+        const allPrefixes = Object.values(allTitlePrefixes);
+        for (const prefix of allPrefixes) {
+            if (name.startsWith(prefix)) {
+                addResult(`✓ Found titled player by name prefix: ${name} (starts with ${prefix})`);
+                return true;
+            }
+        }
+    } else {
+        // For final node, only check selected titles
+        for (const title of selectedTitles) {
+            const prefix = allTitlePrefixes[title];
+            if (prefix && name.startsWith(prefix)) {
+                addResult(`✓ Found titled player with matching prefix: ${name} (${title})`);
+                return true;
+            }
         }
     }
-            
-    debugPrint(`Player ${playerName} has no title`, 2);
+    
+    debugPrint(`Player ${playerName} has no title or doesn't match selected titles`, 2);
     return false;
 }
 
@@ -479,7 +564,7 @@ async function getOpponentsBeatenBy(playerCode) {
     debugPrint(`Looking for opponents beaten by ${playerName}`, 1);
     
     // Add a small delay between API calls
-    let delayBetweenCalls = 300; // milliseconds
+    let delayBetweenCalls = 0; // milliseconds
     
     // Check all game types
     for (const gameType of ["Standard", "Rapid", "Blitz"]) {
@@ -487,7 +572,7 @@ async function getOpponentsBeatenBy(playerCode) {
         await new Promise(r => setTimeout(r, delayBetweenCalls));
         
         // Try with proxy fallback 
-        const games = await getPlayerGamesWithProxyFallback(playerCode, gameType, 100);
+        const games = await getPlayerGamesWithProxyFallback(playerCode, gameType, 1000);
         if (!games || games.length === 0) {
             debugPrint(`No ${gameType} games found for ${playerName}`, 2);
             continue;
@@ -501,7 +586,8 @@ async function getOpponentsBeatenBy(playerCode) {
             const isWin = game.score === 1;
             
             if (isWin) {
-                const opponentCode = String(game.opponent_no);
+                const opponentCode = game.opponent_ecf_code || String(game.opponent_no);
+                
                 // Skip invalid opponent codes
                 if (!opponentCode || opponentCode === "0" || opponentCode === "undefined") {
                     continue;
@@ -538,12 +624,7 @@ async function handleSubmit(event) {
         alert('Please enter a valid ECF player code');
         return;
     }
-    
-    // Remove 'J' suffix if present (some ECF codes end with J)
-    if (playerCode.toUpperCase().endsWith('J')) {
-        playerCode = playerCode.slice(0, -1);
-    }
-    
+
     setLoading(true);
     clearResults();
     clearDebug();
@@ -558,7 +639,14 @@ async function handleSubmit(event) {
     }
     
     try {
+        // Get selected titles
+        const selectedTitles = getSelectedTitles();
+        const titleFilters = selectedTitles.join(", ");
         addResult(`Starting search for player ${playerCode}...`);
+        
+        if (selectedTitles.length < 9) { // 9 is all possible titles
+            addResult(`Looking for paths to players with these titles: ${titleFilters}`);
+        }
         
         const startTime = performance.now();
         const result = await calculateEcfNumber(playerCode);
@@ -579,11 +667,11 @@ async function handleSubmit(event) {
         }
         
         if (result.path && result.path.length > 0) {
-            addResult(`\nPath: ${result.path.join(' → ')}`);
+            addResult(`\nPath: ${formatPath(result.path)}`);
         }
         
         addResult(`\nSearch completed in ${((endTime - startTime) / 1000).toFixed(2)} seconds`);
-        addResult(`API calls: ${apiCallsCounter.players} player lookups, ${apiCallsCounter.games} game lookups`);
+        addResult(`API calls: ${apiCallsCounter.players} player lookups, ${apiCallsCounter.games} batch game lookups`);
         
         // Display proxy performance metrics
         displayProxyPerformance();
@@ -595,15 +683,18 @@ async function handleSubmit(event) {
     }
 }
 
-/**
- * Calculate the ECF number for a player using proper BFS
- * Fixed to ensure shortest path is always found
- */
+// Update calculateEcfNumber to ensure full codes in path
 async function calculateEcfNumber(playerCode, maxDepth = 5) {
-    // Check if we've already calculated this player's ECF number
-    if (ecfNumberCache[playerCode]) {
-        debugPrint(`Using cached Titled Separation for ${playerCode}`, 2);
-        return ecfNumberCache[playerCode];
+    // Get selected titles from checkboxes
+    const selectedTitles = getSelectedTitles();
+    
+    // Create a cache key that includes both player code and selected titles
+    const cacheKey = `${playerCode}_${selectedTitles.sort().join('-')}`;
+    
+    // Check if we've already calculated this player's ECF number with these exact title filters
+    if (ecfNumberCache[cacheKey]) {
+        debugPrint(`Using cached Titled Separation for ${playerCode} with filters: ${selectedTitles.join(', ')}`, 2);
+        return ecfNumberCache[cacheKey];
     }
     
     // Check if the player exists
@@ -617,16 +708,20 @@ async function calculateEcfNumber(playerCode, maxDepth = 5) {
     addResult(`Calculating Titled Separation for ${playerName}...`);
     
     // Check if player is titled immediately
-    if (isTitledPlayer(playerInfo)) {
-        const result = { value: 0, path: [playerName] };
-        ecfNumberCache[playerCode] = result;
+    if (isTitledPlayer(playerInfo, selectedTitles, true)) {
+        const result = { 
+            value: 0, 
+            path: [{ name: playerName, code: playerCode }] 
+        };
+        // Store in cache with the title-specific key
+        ecfNumberCache[cacheKey] = result;
         addResult(`✓ Player is titled: ${playerName}`);
         return result;
     }
     
     // BFS queue with proper breadth-first ordering
     const queue = [];
-    queue.push([playerCode, 0, [playerName]]);  // [playerCode, distance, path]
+    queue.push([playerCode, 0, [{ name: playerName, code: playerCode }]]);  // [playerCode, distance, path]
     const visited = new Set([playerCode]);
     
     debugPrint(`Starting BFS search from ${playerName}`);
@@ -697,14 +792,17 @@ async function calculateEcfNumber(playerCode, maxDepth = 5) {
             }
             
             const opponentName = opponentInfo.full_name || opponentCode;
-            const newPath = [...path, opponentName];
+            const newPath = [...path, { name: opponentName, code: opponentCode }];
             
             // Check if opponent is titled
-            if (isTitledPlayer(opponentInfo)) {
-                const result = { value: distance + 1, path: newPath };
-                ecfNumberCache[playerCode] = result;
+            if (isTitledPlayer(opponentInfo, selectedTitles, true)) {
+                // Ensure all players in path have full ECF codes with suffixes
                 
-                const pathStr = newPath.join(" → ");
+                const result = { value: distance + 1, path: newPath };
+                // Store in cache with the title-specific key
+                ecfNumberCache[cacheKey] = result;
+                
+                const pathStr = formatPath(newPath);
                 addResult(`✓ Found path to titled player (${distance+1} steps): ${pathStr}`);
                 
                 return result;
@@ -726,8 +824,17 @@ async function calculateEcfNumber(playerCode, maxDepth = 5) {
     debugPrint(`Search complete: ${nodesProcessed} players checked, ${playerApiCalls} player API calls, ${gameApiCalls} game API calls`);
     
     const result = { value: -1, path: [] };
-    ecfNumberCache[playerCode] = result;
+    // Store in cache with the title-specific key
+    ecfNumberCache[cacheKey] = result;
     return result;
+}
+
+/**
+ * Format path as plain text
+ */
+function formatPath(path) {
+    // Just join the player names with arrows, no HTML links
+    return path.map(player => player.name).join(" → ");
 }
 
 /**
@@ -738,7 +845,7 @@ function addResult(message) {
     const resultsArea = document.getElementById('results');
     if (resultsArea) {
         resultsArea.innerHTML += `<div>${message}</div>`;
-        resultsArea.scrollTop = resultsArea.scrollHeight;
+        resultsArea.scrollTop = 0; // Scroll to top when new results are added
     }
 }
 
@@ -788,6 +895,26 @@ async function init() {
         });
     }
     
+    // Set up title checkbox handlers
+    const selectAllBtn = document.getElementById('select-all-titles');
+    const deselectAllBtn = document.getElementById('deselect-all-titles');
+    
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', () => {
+            document.querySelectorAll('.title-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+        });
+    }
+    
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', () => {
+            document.querySelectorAll('.title-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+        });
+    }
+    
     // Set up the proxy selector
     const proxySelect = document.getElementById('cors-proxy');
     if (proxySelect) {
@@ -828,4 +955,15 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
             await new Promise(r => setTimeout(r, Math.pow(2, retries) * 500));
         }
     }
+}
+
+/**
+ * Helper: Get player's rating (returns 0 if not available)
+ */
+async function getPlayerRating(playerCode) {
+    const info = await getPlayerInfoWithProxyFallback(playerCode);
+    if (info && typeof info.rating === "number") return info.rating;
+    // Try standard_rating if available
+    if (info && typeof info.standard_rating === "number") return info.standard_rating;
+    return 0;
 }
