@@ -684,146 +684,73 @@ async function handleSubmit(event) {
 }
 
 async function calculateEcfNumber(playerCode, maxDepth = 5) {
-    // Get selected titles from checkboxes
     const selectedTitles = getSelectedTitles();
-    
-    // Create a cache key that includes both player code and selected titles
     const cacheKey = `${playerCode}_${selectedTitles.sort().join('-')}`;
-    
-    // Check if we've already calculated this player's ECF number with these exact title filters
     if (ecfNumberCache[cacheKey]) {
         debugPrint(`Using cached Titled Separation for ${playerCode} with filters: ${selectedTitles.join(', ')}`, 2);
         return ecfNumberCache[cacheKey];
     }
-    
-    // Check if the player exists
+
     const playerInfo = await getPlayerInfo(playerCode);
     if (!playerInfo) {
         addResult(`Player ${playerCode} not found.`);
         return { value: -1, path: [] };
     }
-    
     const playerName = playerInfo.full_name || playerCode;
     addResult(`Calculating Titled Separation for ${playerName}...`);
-    
-    // Check if player is titled immediately
-    if (isTitledPlayer(playerInfo, selectedTitles, true)) {
-        const result = { 
-            value: 0, 
-            path: [{ name: playerName, code: playerCode }] 
-        };
-        // Store in cache with the title-specific key
-        ecfNumberCache[cacheKey] = result;
-        addResult(`✓ Player is titled: ${playerName}`);
-        return result;
+
+    // 1) check direct wins over a titled player → separation = 0
+    const directOpponents = await getOpponentsBeatenBy(playerCode);
+    for (const oppCode of directOpponents) {
+        const oppInfo = await getPlayerInfoWithProxyFallback(oppCode);
+        if (isTitledPlayer(oppInfo, selectedTitles, true)) {
+            const path = [
+                { name: playerName, code: playerCode },
+                { name: oppInfo.full_name || oppCode, code: oppCode }
+            ];
+            const result = { value: 0, path };
+            ecfNumberCache[cacheKey] = result;
+            addResult(`✓ Direct win over titled player (0 steps): ${formatPath(path)}`);
+            return result;
+        }
     }
-    
-    // BFS queue with proper breadth-first ordering
-    const queue = [];
-    queue.push([playerCode, 0, [{ name: playerName, code: playerCode }]]);  // [playerCode, distance, path]
+
+    // 2) BFS for indirect paths: root at distance=0, first‐level opponents → 0, second‐level → 1, etc.
+    const queue = [[playerCode, 0, [{ name: playerName, code: playerCode }]]];
     const visited = new Set([playerCode]);
-    
-    debugPrint(`Starting BFS search from ${playerName}`);
-    
-    // Track progress stats
     let nodesProcessed = 0;
-    const apiCallsStart = {
-        players: Object.keys(playerInfoCache).length,
-        games: Object.keys(playerGamesCache).length
-    };
-    
-    // Process the queue in strict level order (true BFS)
+
     while (queue.length > 0) {
-        // Get the next player to process (FIFO - breadth first)
         const [currentCode, distance, path] = queue.shift();
         nodesProcessed++;
-        
-        if (nodesProcessed % 10 === 0) {
-            addResult(`Still searching... Leave the tab open...`);
-        }
-        
-        // Stop if we've gone too deep
-        if (distance >= maxDepth) {
-            debugPrint(`Reached max depth (${maxDepth}) for this branch`, 2);
-            continue;
-        }
-        
-        const currentInfo = await getPlayerInfoWithProxyFallback(currentCode);
-        if (!currentInfo) {
-            debugPrint(`Could not get info for ${currentCode}, skipping branch`, 1);
-            continue;
-        }
-        
-        const currentName = currentInfo.full_name || currentCode;
-        debugPrint(`Examining ${currentName} at distance ${distance}`, 1);
-        
-        // Get all opponents beaten by this player
-        let beatenOpponents;
-        try {
-            beatenOpponents = await getOpponentsBeatenBy(currentCode);
-        } catch (err) {
-            debugPrint(`Error getting opponents for ${currentName}: ${err.message}`, 1);
-            continue;
-        }
-        
-        if (!beatenOpponents || beatenOpponents.length === 0) {
-            debugPrint(`${currentName} has not beaten any opponents`, 1);
-            continue;
-        }
-        
-        debugPrint(`${currentName} has beaten ${beatenOpponents.length} unique opponents`, 1);
-        
-        // Sort the opponents to ensure deterministic order across runs
-        beatenOpponents.sort();
-        
-        // Process all opponents at this level
-        for (const opponentCode of beatenOpponents) {
-            if (visited.has(opponentCode)) {
-                continue;
-            }
-            
+        if (distance >= maxDepth) continue;
+
+        const beaten = await getOpponentsBeatenBy(currentCode);
+        beaten.sort();
+        for (const opponentCode of beaten) {
+            if (visited.has(opponentCode)) continue;
             visited.add(opponentCode);
-            
-            const opponentInfo = await getPlayerInfoWithProxyFallback(opponentCode);
-            if (!opponentInfo) {
-                debugPrint(`Could not get info for opponent ${opponentCode}`, 2);
-                continue;
-            }
-            
-            const opponentName = opponentInfo.full_name || opponentCode;
-            const newPath = [...path, { name: opponentName, code: opponentCode }];
-            
-            // Check if opponent is titled
-            if (isTitledPlayer(opponentInfo, selectedTitles, true)) {
-                // Ensure all players in path have full ECF codes with suffixes
-                
-                const result = { value: distance + 1, path: newPath };
-                // Store in cache with the title-specific key
+
+            const oppInfo = await getPlayerInfoWithProxyFallback(opponentCode);
+            if (!oppInfo) continue;
+
+            const oppName = oppInfo.full_name || opponentCode;
+            const newPath = [...path, { name: oppName, code: opponentCode }];
+
+            if (isTitledPlayer(oppInfo, selectedTitles, true)) {
+                // distance here is number of “steps removed”
+                const result = { value: distance, path: newPath };
                 ecfNumberCache[cacheKey] = result;
-                
-                const pathStr = formatPath(newPath);
-                addResult(`✓ Found path to titled player (${distance+1} steps): ${pathStr}`);
-                
+                addResult(`✓ Found path to titled player (${distance} steps): ${formatPath(newPath)}`);
                 return result;
             }
-            
-            // Add to queue for next level processing
-            if (distance + 1 < maxDepth) {
-                queue.push([opponentCode, distance + 1, newPath]);
-                debugPrint(`Added ${opponentName} to queue at distance ${distance+1}`, 2);
-            }
+
+            queue.push([opponentCode, distance + 1, newPath]);
         }
     }
-    
+
     addResult(`✗ No path found to any titled player within ${maxDepth} steps`);
-    
-    const playerApiCalls = Object.keys(playerInfoCache).length - apiCallsStart.players;
-    const gameApiCalls = Object.keys(playerGamesCache).length - apiCallsStart.games;
-    
-    debugPrint(`Search complete: ${nodesProcessed} players checked, ${playerApiCalls} player API calls, ${gameApiCalls} game API calls`);
-    
     const result = { value: -1, path: [] };
-    // Store in cache with the title-specific key
     ecfNumberCache[cacheKey] = result;
     return result;
 }
