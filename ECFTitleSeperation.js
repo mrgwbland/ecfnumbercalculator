@@ -8,19 +8,60 @@ const ecfNumberCache = {};
 // Debug level: 0=minimal, 1=some, 2=detailed
 let DEBUG_LEVEL = 0;
 
-// Available CORS proxies
+// Backend status
+let backendOnline = false;
+
+// Available CORS proxies - separate base URL and API path
+const BACKEND_URL = "https://ecftitleseperationbackend.onrender.com";
 const CORS_PROXIES = {
+    "render-backend": `${BACKEND_URL}/api`,
     "corsproxy.io": "https://corsproxy.io/?",
     "allorigins": "https://api.allorigins.win/raw?url="
-    // Removed ineffective proxies
 };
 
-// Currently selected CORS proxy - start with best performer
-let currentProxyKey = "corsproxy.io";
+// Currently selected CORS proxy - start with render backend
+let currentProxyKey = "render-backend";
 
 // Base URL for the ECF API
 const BASE_URL = "https://rating.englishchess.org.uk/v2/new/api.php";
-const ECF_API = "https://rating.englishchess.org.uk";
+
+/**
+ * Check if the render backend is available
+ */
+async function checkBackendStatus() {
+    try {
+        addResult("⏳ Checking backend server status...");
+        // Use the root URL for health check, not the API endpoint
+        const pingUrl = BACKEND_URL;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const response = await fetch(pingUrl, { 
+            signal: controller.signal 
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+            backendOnline = true;
+            addResult("✅ Backend server is online! Using fast direct connection.");
+            return true;
+        } else {
+            backendOnline = false;
+            addResult(`⚠️ WARNING: Backend server returned error ${response.status}`);
+            addResult("⚠️ Falling back to public proxies (slower)");
+            changeProxy("corsproxy.io");
+            return false;
+        }
+    } catch (e) {
+        backendOnline = false;
+        addResult(`⚠️ WARNING: Backend server is offline or sleeping (${e.message})`);
+        addResult("⚠️ Using public proxies instead (slower). Try again later.");
+        changeProxy("corsproxy.io");
+        return false;
+    }
+}
 
 /**
  * Print debug messages to the console and debug area
@@ -53,7 +94,6 @@ function changeProxy(proxyKey) {
     if (CORS_PROXIES.hasOwnProperty(proxyKey)) {
         currentProxyKey = proxyKey;
         debugPrint(`CORS proxy changed to: ${proxyKey}`);
-        // Don't clear caches anymore - we want to track all API calls
         return true;
     }
     return false;
@@ -61,6 +101,7 @@ function changeProxy(proxyKey) {
 
 // Track proxy performance metrics
 const proxyPerformance = {
+    "render-backend": { attempts: 0, successes: 0, totalTime: 0, lastSuccess: 0 },
     "corsproxy.io": { attempts: 0, successes: 0, totalTime: 0, lastSuccess: 0 },
     "allorigins": { attempts: 0, successes: 0, totalTime: 0, lastSuccess: 0 }
 };
@@ -92,6 +133,9 @@ function getBestProxy() {
         // Skip proxies that haven't been tried yet - we'll try them in order
         if (stats.attempts === 0) return;
         
+        // Skip render backend if it's offline
+        if (key === "render-backend" && !backendOnline) return;
+        
         // Calculate a score based on success rate and recency
         const successRate = stats.attempts > 0 ? stats.successes / stats.attempts : 0;
         const avgResponseTime = stats.successes > 0 ? stats.totalTime / stats.successes : 9999;
@@ -111,7 +155,7 @@ function getBestProxy() {
     
     // If no proxy has been tried or all have failed, start with the first one
     if (!bestProxy) {
-        bestProxy = Object.keys(proxyPerformance)[0];
+        bestProxy = backendOnline ? "render-backend" : "corsproxy.io";
     }
     
     return bestProxy;
@@ -169,8 +213,16 @@ async function getPlayerInfo(playerCode) {
     // Try with the current proxy first
     const proxyKey = currentProxyKey;
     const corsProxy = CORS_PROXIES[proxyKey];
-    const apiEndpoint = `${BASE_URL}?v2/players/code/${playerCode}`;
-    const url = corsProxy ? `${corsProxy}${encodeURIComponent(apiEndpoint)}` : apiEndpoint;
+    let url;
+    
+    // Different URL format based on proxy type
+    if (proxyKey === "render-backend") {
+        url = `${corsProxy}/v2/players/code/${playerCode}`;
+        debugPrint(`Using render backend URL: ${url}`, 2);
+    } else {
+        const apiEndpoint = `${BASE_URL}?v2/players/code/${playerCode}`;
+        url = corsProxy ? `${corsProxy}${encodeURIComponent(apiEndpoint)}` : apiEndpoint;
+    }
     
     try {
         debugPrint(`API request: ${url}`, 2);
@@ -185,6 +237,12 @@ async function getPlayerInfo(playerCode) {
         
         if (!response.ok) {
             console.error(`Error fetching player info for ${playerCode}: ${response.status}`);
+            
+            // If render-backend fails, mark it as offline
+            if (proxyKey === "render-backend") {
+                backendOnline = false;
+            }
+            
             playerInfoCache[playerCode] = null; // Cache failed results too
             return null;
         }
@@ -202,6 +260,12 @@ async function getPlayerInfo(playerCode) {
     } catch (e) {
         // Update metrics with failure
         updateProxyPerformance(proxyKey, false, 0);
+        
+        // If render-backend fails, mark it as offline
+        if (proxyKey === "render-backend") {
+            backendOnline = false;
+        }
+        
         console.error(`Exception fetching player info for ${playerCode}: ${e}`);
         playerInfoCache[playerCode] = null; // Cache failed results too
         return null;
@@ -310,10 +374,18 @@ async function getPlayerGames(playerCode, gameType = "Standard", limit = 100) {
     apiCallsCounter.games++;
     
     // Use the currently selected CORS proxy
-    const corsProxy = CORS_PROXIES[currentProxyKey];
-    // Match the Python URL structure that's known to work
-    const apiEndpoint = `${BASE_URL}?v2/games/${gameType}/player/${playerCode}/limit/${limit}`;
-    const url = corsProxy ? `${corsProxy}${encodeURIComponent(apiEndpoint)}` : apiEndpoint;
+    const proxyKey = currentProxyKey;
+    const corsProxy = CORS_PROXIES[proxyKey];
+    let url;
+    
+    // Different URL format based on proxy type
+    if (proxyKey === "render-backend") {
+        url = `${corsProxy}/v2/games/${gameType}/player/${playerCode}/limit/${limit}`;
+        debugPrint(`Using render backend URL: ${url}`, 2);
+    } else {
+        const apiEndpoint = `${BASE_URL}?v2/games/${gameType}/player/${playerCode}/limit/${limit}`;
+        url = corsProxy ? `${corsProxy}${encodeURIComponent(apiEndpoint)}` : apiEndpoint;
+    }
     
     try {
         debugPrint(`API request: ${url}`, 2);
@@ -321,6 +393,12 @@ async function getPlayerGames(playerCode, gameType = "Standard", limit = 100) {
         
         if (!response.ok) {
             console.error(`Error fetching ${gameType} games for ${playerCode}: ${response.status}`);
+            
+            // If render-backend fails, mark it as offline
+            if (proxyKey === "render-backend") {
+                backendOnline = false;
+            }
+            
             playerGamesCache[cacheKey] = []; // Cache empty results too
             return [];
         }
@@ -334,6 +412,12 @@ async function getPlayerGames(playerCode, gameType = "Standard", limit = 100) {
         return games;
     } catch (e) {
         console.error(`Exception fetching ${gameType} games for ${playerCode}: ${e}`);
+        
+        // If render-backend fails, mark it as offline
+        if (proxyKey === "render-backend") {
+            backendOnline = false;
+        }
+        
         playerGamesCache[cacheKey] = []; // Cache empty results too
         return [];
     }
@@ -687,7 +771,10 @@ function setLoading(isLoading) {
 /**
  * Initialize the page
  */
-function init() {
+async function init() {
+    // First check if the backend is available
+    await checkBackendStatus();
+    
     const form = document.getElementById('calculator-form');
     if (form) {
         form.addEventListener('submit', handleSubmit);
@@ -711,6 +798,9 @@ function init() {
         });
     }
 }
+
+// Initialize when the DOM is loaded
+document.addEventListener('DOMContentLoaded', init);
 
 /**
  * Retry fetching a URL with exponential backoff
@@ -739,6 +829,3 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
         }
     }
 }
-
-// Initialize when the DOM is loaded
-document.addEventListener('DOMContentLoaded', init);
