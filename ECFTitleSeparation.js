@@ -683,7 +683,6 @@ async function handleSubmit(event) {
     }
 }
 
-// Update calculateEcfNumber to ensure full codes in path
 async function calculateEcfNumber(playerCode, maxDepth = 5) {
     // Get selected titles from checkboxes
     const selectedTitles = getSelectedTitles();

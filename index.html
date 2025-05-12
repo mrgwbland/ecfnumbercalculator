@@ -198,7 +198,24 @@
             </div>
             
             <button type="submit" id="calculate-button">Calculate</button>
+            <button type="button" id="help-button" style="margin-left:10px;">Help</button>
         </form>
+        
+        <div id="help-tips" class="note" style="display:none; margin-top:15px;">
+            <strong>Tips for Using the ECF Title Separation Calculator:</strong>
+            <ul>
+                <li>Enter your ECF Player Code (e.g., <code>372524J</code>). You can find this on the <a href="https://rating.englishchess.org.uk/v2/new/list_players.php" target="_blank">ECF Rating website</a>.</li>
+                <li>Select which chess titles you want to search for. By default, all are selected.</li>
+                <li>If you want to see more details about the search, increase the Debug Level.</li>
+                <li>Still stuck? Message me on <a href="https://www.chess.com/member/62westwallaby" target="_blank">chess.com</a>!</li>
+            </ul>
+            <strong>It's taking too long, what can I do?:</strong>
+            <ul>
+                <li>Reload the site, it should tell you if the backend server is online. If it is offline the site has to resort to slow public servers, this is fine for quick searches but can make a big impact in long searches. Try messaging me and I can turn the backend online.</li>
+                <li>Try a less specific search criteria- it will take a lot longer to find paths to beat GM games than of any titled player.</li>
+                <li>Beat stronger opponents! A strong player will have a much quicker search as they will have much more links to beating titled players.</li>
+            </ul>
+        </div>
         
         <div id="loading" class="loading">
             <div class="spinner"></div>
@@ -216,5 +233,17 @@
         Made by George Bland | Message me on chess.com here <a href="https://www.chess.com/member/62westwallaby" target="_blank">62WestWallaby</a>!
     </footer>
     <script src="ECFTitleSeparation.js"></script>
+    <script>
+        // Show/hide help tips when Help button is clicked
+        document.addEventListener('DOMContentLoaded', function() {
+            const helpBtn = document.getElementById('help-button');
+            const helpTips = document.getElementById('help-tips');
+            if (helpBtn && helpTips) {
+                helpBtn.addEventListener('click', function() {
+                    helpTips.style.display = helpTips.style.display === 'none' ? 'block' : 'none';
+                });
+            }
+        });
+    </script>
 </body>
 </html>
