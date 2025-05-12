@@ -740,7 +740,7 @@ async function calculateEcfNumber(playerCode, maxDepth = 5) {
         nodesProcessed++;
         
         if (nodesProcessed % 10 === 0) {
-            addResult(`Searching... (${nodesProcessed} players checked, ${queue.length} in queue)`);
+            addResult(`Still searching... Leave the tab open...`);
         }
         
         // Stop if we've gone too deep
