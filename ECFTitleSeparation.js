@@ -31,8 +31,8 @@ const BASE_URL = "https://rating.englishchess.org.uk/v2/new/api.php";
 async function checkBackendStatus() {
     try {
         addResult("⏳ Checking backend server status...");
-        // Use the root URL for health check, not the API endpoint
-        const pingUrl = BACKEND_URL;
+        // Use an actual API endpoint instead of just root URL to verify functionality
+        const pingUrl = `${BACKEND_URL}/api/v2/players/code/1`;
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout

@@ -245,10 +245,6 @@ def main():
     else:
         player_code = input("Enter the ECF player code (e.g., 120787): ")
     
-    # Remove 'J' suffix if present (some ECF codes end with J)
-    if player_code.upper().endswith('J'):
-        player_code = player_code[:-1]
-    
     print("=" * 60)
     print(f"Titled Speration Calculator - Debug Level {DEBUG_LEVEL}")
     print("=" * 60)
